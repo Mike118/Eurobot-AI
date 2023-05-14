@@ -34,7 +34,7 @@
                             <!--Map components-->
                             <template v-for="item in map.components">
                                 <template v-if="item.shape.type == 'rectangle'">
-                                    <g>
+                                    <g v-on:click="onMapComponentClick(item)">
                                         <title>{{item.name}} - {{item.type}} - {{item.team}}</title>
                                         <rect v-bind:x="item.shape.x" v-bind:y="item.shape.y" v-bind:width="item.shape.width" v-bind:height="item.shape.height" v-bind:style="{ fill: item.shape.color }" style="stroke-width:1;stroke:rgb(0,0,0);opacity: 0.9;" />
                                     </g>
@@ -68,6 +68,21 @@
                                         <circle  v-bind:cx="0" v-bind:cy="0" r="25" style="fill: white;stroke-width:4;stroke:rgb(0,0,0);opacity: 0.9;" />
                                         <line v-bind:x1="0" v-bind:y1="0" v-bind:x2="50" v-bind:y2="0" style="stroke-width:10;stroke:purple;opacity: 0.9;" />
                                     </g>
+                                </template>
+                                <template v-if="'otherAccess' in item">
+                                    <template v-for="access in item.otherAccess">
+                                        <g v-if="item.shape.type == 'rectangle'">
+                                            <line v-bind:x1="access.x" v-bind:y1="access.y" v-bind:x2="item.shape.x+item.shape.width/2" v-bind:y2="item.shape.y+item.shape.height/2" style="stroke-width:4;stroke:green;opacity: 0.9;" />
+                                        </g>
+                                        <g v-if="item.shape.type == 'circle'">
+                                            <line v-bind:x1="access.x" v-bind:y1="access.y" v-bind:x2="item.shape.x" v-bind:y2="item.shape.y" style="stroke-width:4;stroke:green;opacity: 0.9;" />
+                                        </g>
+                                        <g v-bind:transform="'translate('+access.x+' '+access.y+') rotate('+access.angle+')'">
+                                            <title>{{item.name}} - {{item.type}} - {{item.team}}</title>
+                                            <circle  v-bind:cx="0" v-bind:cy="0" r="25" style="fill: grey;stroke-width:4;stroke:rgb(0,0,0);opacity: 0.9;" />
+                                            <line v-bind:x1="0" v-bind:y1="0" v-bind:x2="50" v-bind:y2="0" style="stroke-width:10;stroke:purple;opacity: 0.9;" />
+                                        </g>
+                                    </template>
                                 </template>
                             </template>
 
@@ -163,6 +178,10 @@
                             <div class="form-check">
                                 <input type="checkbox" class="form-check-input" id="cb-collisions" v-model="appParams.disableColisions">
                                 <label class="form-check-label" for="cb-collisions">Disable collisions</label>
+                            </div>
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="cb-localisation" v-model="appParams.disableLocalisation">
+                                <label class="form-check-label" for="cb-localisation">Disable localisation</label>
                             </div>
                         </div>
                     </div>

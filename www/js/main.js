@@ -250,10 +250,19 @@ function runAction(action){
 }
 function runModuleFunction(moduleName, funcName, parameters={}){
     var params = {};
-    for(let p in parameters) params[p] = parameters[p].value;
+    for(let p in parameters){
+        if(parameters[p].type != 'text') params[p] = parseFloat(parameters[p].value);
+        else                        params[p] = parameters[p].value;
+    }
     console.log(funcName, JSON.stringify(params))
     var payload = {command: "runModuleFunction", moduleName: moduleName, funcName: funcName, params: params};
     communication.client.publish("/control", JSON.stringify(payload))
+}
+function onMapComponentClick(item){
+    if('startPosition' in item){
+        var payload = {command: "runModuleFunction", moduleName: "robot", funcName: "selectStartPosition", params: item.startPosition};
+        communication.client.publish("/control", JSON.stringify(payload))
+    }
 }
 
 

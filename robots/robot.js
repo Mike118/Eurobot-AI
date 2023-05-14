@@ -34,14 +34,14 @@ module.exports = class Robot {
         //this.color = "";
         this.radius = 0; // mm
         this.modules = {
-            robotLink: null,
+            //robotLink: null,
             lidar: null,
             base: null
         };
         
         let robotConnected = true;
         if(!this.app.parameters.simulate){
-            this.modules.robotLink = new Robotlink(app);
+            //this.modules.robotLink = new Robotlink(app);
             this.modules.base = new Base(app);
             this.modules.controlPanel = new ControlPanel(app);
         }
@@ -57,8 +57,11 @@ module.exports = class Robot {
         this.collisionDistance = 200; // distance of objects to trigger a break (usually radius + ~100mm)
         this.slowdownAngle = 150; // angle used to check obstacles from lidar around movement direction
         this.slowdownDistance = 0; // distance of object to slow down the robot (greater than collisionDistance)
+        this.slowdownDistanceOffset = 200; // multiplied by speed in m/s and added to slowdownDistance
         this.slowdown = false;
+        this.slowDownSpeed = 0.3;
         this.disableColisions = !!this.app.parameters.disableColisions;
+        this.disableLocalisation = !!this.app.parameters.disableLocalisation;
         this.lastPositionUpdateTime=0;
         this.funnyActionTimeout = null;
 
@@ -79,12 +82,12 @@ module.exports = class Robot {
             })
         }
         
-        if(this.modules.robotLink){
+        /*if(this.modules.robotLink){
             await this.modules.robotLink.init().catch((e)=>{
                 this.app.logger.log("==> RobotLink not connected",e);
                 this.modules.robotLink = null;
             })
-        }
+        }*/
         if(this.modules.base){
             await this.modules.base.init().catch((e)=>{
                 this.modules.base = null;
@@ -100,7 +103,7 @@ module.exports = class Robot {
                 this.modules.lidarLocalisation = null;
             })
         }
-        if(!this.modules.robotLink) this.app.logger.log("/!\\ ROBOT NOT CONNECTED");
+        //if(!this.modules.robotLink) this.app.logger.log("/!\\ ROBOT NOT CONNECTED");
         if(this.app.parameters.simulate) this.app.logger.log("/!\\ RUNNING SIMULATION");
         //await this.initMatch();
         this.send();
@@ -112,7 +115,8 @@ module.exports = class Robot {
         if(this.modules.lidar) await this.modules.lidar.close();
         if(this.modules.lidarLoc) await this.modules.lidarLoc.close();
         if(this.modules.lidarLocalisation) await this.modules.lidarLocalisation.close();
-        if(this.modules.robotLink) await this.modules.robotLink.close();
+        //if(this.modules.robotLink) await this.modules.robotLink.close();
+        if(this.modules.base) await this.modules.base.close();
         if(this.modules.controlPanel) await this.modules.controlPanel.close();
     }
 
@@ -122,6 +126,8 @@ module.exports = class Robot {
             this.x = preset.x;
             this.y = preset.y;
             this.angle = preset.angle;
+            if(this.modules.arm && await this.modules.arm.supportPosition()) await this.modules.arm.setPosition({x:this.x, y:this.y, angle:this.angle});
+            if(this.modules.base) await this.modules.base.setPosition({x:this.x, y:this.y, angle:this.angle, resetTarget:1});
         }
         if('team' in preset){
             this.team = preset.team;
@@ -139,8 +145,9 @@ module.exports = class Robot {
         this.lastTarget.x = this.x;
         this.lastTarget.y = this.y;
         this.lastTarget.angle = this.angle;
-        if(this.modules.base) await this.modules.base.enableMove();
-        if(this.modules.base) await this.modules.base.setPosition({x:this.x, y:this.y, angle:this.angle});
+        if(this.modules.base) await this.modules.base.setPosition({x:this.x, y:this.y, angle:this.angle, resetTarget:1});
+        if(this.modules.arm && await this.modules.arm.supportPosition()) await this.modules.arm.setPosition({x:this.x, y:this.y, angle:this.angle});
+        //if(this.modules.base) await this.modules.base.enableMove();
         if(this.modules.base) await this._updatePositionAndMoveStatus();
         //Other specific init actions should be defined in year-dedicated robot file
         this.send();
@@ -168,7 +175,7 @@ module.exports = class Robot {
             collisionAngle: this.collisionAngle,
             collisionDistance: this.collisionDistance,
             slowdownAngle: this.slowdownAngle,
-            slowdownDistance: this.slowdownDistance,
+            slowdownDistance: this.slowdownDistance+(Math.abs(this.speed)*this.slowdownDistanceOffset),
             slowdown: this.slowdown
         }
         this.app.mqttServer.publish({
@@ -213,6 +220,7 @@ module.exports = class Robot {
         if(this.modules.controlPanel){
             await this.modules.controlPanel.setScore({score:this.score});
         }
+        this.app.logger.log("Score: "+this.score);
         return true;
     }
     async addScore(parameters){ 
@@ -238,18 +246,18 @@ module.exports = class Robot {
     
     async waitForStart(parameters){
         let matchStopped = false;
-        await this.initMatch();
         if(!this.app.parameters.simulate && this.modules.controlPanel){
             let state = "waiting" // waiting / ready / go
-            let status = await this.modules.controlPanel.getColorStart();
-            if(this.app.map && this.app.map.teams)
-                this.team = this.app.map.teams[status.color];
+            let status = await this.modules.controlPanel.getStart();
+            /*if(this.app.map && this.app.map.teams)
+                this.team = this.app.map.teams[status.color];*/
             await this.initMatch();
             this.send();
             //Wait for the starter to be positioned and pulled
             let changed = false;
             do {
-                status = await this.modules.controlPanel.getColorStart();
+                await this.findLocalisation();
+                status = await this.modules.controlPanel.getStart();
                 console.log("status", status, "state", state);
                 if(status){
                     if(state=="waiting" && !status.start){
@@ -260,12 +268,12 @@ module.exports = class Robot {
                         state = "go"
                         changed = true;
                     }
-                    let color = parseInt(""+status.color);
+                    /*let color = parseInt(""+status.color);
                     if(this.app.map && this.app.map.teams && this.team != this.app.map.teams[color]){
                         this.team = this.app.map.teams[color];
                         await this.initMatch();
                         changed = true;
-                    }
+                    }*/
                     if(changed){
                         this.send();
                         changed = false;
@@ -277,6 +285,9 @@ module.exports = class Robot {
                     this.app.intelligence.startMatchTimer();//Restarts Match timer
                 }
             } while(state!="go" && !matchStopped);
+        }
+        else{
+            await this.initMatch();
         }
         if(!matchStopped) this.app.logger.log("GO");
         this.send();
@@ -312,19 +323,31 @@ module.exports = class Robot {
     }
     
     async findLocalisation(parameters){
+        if(this.disableLocalisation) return false;
+        let foundPosition = null;
         if(this.modules.lidarLocalisation){
             let count = parameters.count||2;
             for(let i=0;i<count;i++){
                 let found = await this.modules.lidarLocalisation.resolvePosition();
-                if(found){
-                    this._updatePosition(
-                        this.modules.lidarLocalisation.x,
-                        this.modules.lidarLocalisation.y,
-                        this.modules.lidarLocalisation.angle);
+                if(found) {
+                    foundPosition = {
+                        x: this.modules.lidarLocalisation.x,
+                        y: this.modules.lidarLocalisation.y,
+                        angle: this.modules.lidarLocalisation.angle
+                    };
                 }
-                else return false;
             }
-            if(this.modules.base) await this.modules.base.setPosition({x:this.x, y:this.y, angle:this.angle});
+        }
+        else if(this.modules.arm && await this.modules.arm.supportPosition()){
+            foundPosition = await this.modules.arm.getPosition();
+            if(foundPosition && !foundPosition.isNew) foundPosition = null;
+        }
+        if(foundPosition){
+            //console.log("Found position", foundPosition);
+            this._updatePosition(foundPosition.x, foundPosition.y, foundPosition.angle);
+            let resetTarget = 1;
+            if(parameters && ("resetTarget" in parameters) && !parameters.resetTarget) resetTarget = 0;
+            if(this.modules.base) await this.modules.base.setPosition({x:this.x, y:this.y, angle:this.angle, resetTarget:resetTarget});
             this.send();
         }
         return true;
@@ -340,20 +363,36 @@ module.exports = class Robot {
         
         this.app.logger.log("  -> moving to "+component.name);
         let success = false
-        if("access" in component){
-            let angle = component.access.angle;
-            if("angle" in parameters) angle = parameters.angle;
-            let offsetX = parameters.offsetX||0;
-            let offsetY = parameters.offsetY||0;
-            success = await this.moveToPosition({
-                x:component.access.x + offsetX,
-                y:component.access.y + offsetY,
-                angle:angle,
-                speed:parameters.speed,
-                nearDist:parameters.nearDist||0,
-                nearAngle:parameters.nearAngle||0
-            });
+        // Find best access point
+        let accessList = []
+        if("access" in component) accessList.push(component.access)
+        if(!parameters.preventOtherAccess && "otherAccess" in component) accessList.push(...component.otherAccess)
+        let access = null;
+        let minLength = 99999999999;
+        for(let acc of accessList){
+            let path = this.app.map.findPath(this.x, this.y, acc.x, acc.y);
+            if(path.length<2) continue;
+            if(!this.isMovementPossible(path[1][0], path[1][1])) continue;
+            let pathLength = this.app.map.getPathLength(path);
+            if(pathLength<minLength){
+                minLength = pathLength;
+                access = acc;
+            }
         }
+        if(access == null) return false;
+        // Move to access point
+        let angle = access.angle;
+        if("angle" in parameters) angle = parameters.angle;
+        let offsetX = parameters.offsetX||0;
+        let offsetY = parameters.offsetY||0;
+        success = await this.moveToPosition({
+            x:access.x + offsetX,
+            y:access.y + offsetY,
+            angle:angle,
+            speed:parameters.speed,
+            nearDist:parameters.nearDist||0,
+            nearAngle:parameters.nearAngle||0
+        });
         this.send();
         //await utils.sleep(500);
         return success
@@ -432,7 +471,8 @@ module.exports = class Robot {
         this.lastTarget.x = this.x;
         this.lastTarget.y = this.y;
         this.lastTarget.angle = this.angle;
-        if(this.modules.base) await this.modules.base.setPosition({x:this.x, y:this.y, angle:this.angle});
+        if(this.modules.arm && await this.modules.arm.supportPosition()) await  this.modules.arm.setPosition({x:this.x, y:this.y, angle:this.angle});
+        if(this.modules.base) await this.modules.base.setPosition({x:this.x, y:this.y, angle:this.angle, resetTarget:1});
         if(this.modules.base) await this._updatePositionAndMoveStatus();
         return true;
     }
@@ -485,6 +525,7 @@ module.exports = class Robot {
             angle: endAngle,
             speed:parameters.speed,
             preventPathFinding: true,
+            nearDist: parameters.nearDist,
             nearAngle: parameters.nearAngle
         });
     }
@@ -522,11 +563,12 @@ module.exports = class Robot {
         if(!isNaN(x) && !isNaN(y)) this._updateMovementAngle(x,y);
         if(!this.modules.lidar) return true;
         if(this.disableColisions) return true;
+        let collisionCountTarget = 10;
         let collisionCount = 0;
         let slowdownCount = 0;
         let angleA = utils.normAngle(this.movementAngle-this.collisionAngle/2);
         let angleB = utils.normAngle(this.movementAngle+this.collisionAngle/2);
-        console.log("Detect between", angleA, angleB, this.modules.lidar.measures.length)
+        //console.log("Detect between", angleA, angleB, this.modules.lidar.measures.length)
         let lastCollisionAngle = 0;
         for(let measure of this.modules.lidar.measures){
             //Check for collisions
@@ -534,15 +576,15 @@ module.exports = class Robot {
             //let inCollisionRange = (angleA<=measureAngle && measureAngle<=angleB)
             let inCollisionRange = utils.angleInRange( angleA, angleB, measureAngle );
             if(measure.d>0 && measure.d<this.collisionDistance){
-                console.log("angleInRange(", angleA, angleB, measureAngle, ") =", inCollisionRange)
+                //console.log("angleInRange(", angleA, angleB, measureAngle, ") =", inCollisionRange)
             }
             if(inCollisionRange && measure.d>0 && measure.d<this.collisionDistance){
                 if(utils.angleInRange( lastCollisionAngle-0.25, lastCollisionAngle+0.25, measureAngle )) continue; // too close rays means interference
                 lastCollisionAngle = measureAngle;
                 collisionCount++;
-                if(collisionCount>=10){
+                if(collisionCount>=collisionCountTarget){
                     //Add obstacle on map
-                    let obstacleRadius = 150;
+                    let obstacleRadius = 165;
                     let obstacleTimeout = 2000; //will be removed from map in N milliseconds
                     console.log("collision detected");
                     this.app.logger.log("collision detected");
@@ -574,9 +616,10 @@ module.exports = class Robot {
                 utils.normAngle(this.movementAngle+this.slowdownAngle/2),
                 utils.normAngle(measure.a+this.angle)
             );
-            if(inSlowdownRange && measure.d>0 && measure.d<this.slowdownDistance) slowdownCount++
+            let slowDist = this.slowdownDistance+(Math.abs(this.speed)*this.slowdownDistanceOffset);
+            if(inSlowdownRange && measure.d>0 && measure.d<slowDist) slowdownCount++
         }
-        this.slowdown = slowdownCount>=3;
+        this.slowdown = slowdownCount>=collisionCountTarget*0.6;
         return true
     }
 
@@ -605,7 +648,9 @@ module.exports = class Robot {
     }*/
 
     async _updatePositionAndMoveStatus(){
+        
         let moveStatus = "end";
+        await this.findLocalisation({resetTarget:0});
         let status = await this.modules.base.getStatus();
         //console.log(status)
         if(status && typeof status === "object"){
@@ -615,16 +660,19 @@ module.exports = class Robot {
             this.angle = status.angle;
             this.speed = status.speed;
         }
+        
+        if(this.slowdown) this.modules.base.setSpeedLimit({speed:this.slowDownSpeed});
+        else this.modules.base.setSpeedLimit({speed:0});
+        
         this.send();
         return moveStatus;
     }
 
     async _performMovement(x, y, angle, speed, nearDist=0, nearAngle=0){
-        let moveSpeed = this.slowdown?0.1:speed;
-        let sleep = 100;
+        let sleep = 30;
         let success = true;
         let moveStatus = "";
-        this.app.logger.log(`-> move coordinates ${x} ${y} ${angle} ${speed}, near ${nearDist} ${nearAngle}`);
+        //this.app.logger.log(`-> move coordinates ${x} ${y} ${angle} ${speed}, near ${nearDist} ${nearAngle}`);
 
         //Update position and check obstacles
         await this._updatePositionAndMoveStatus();
@@ -643,7 +691,6 @@ module.exports = class Robot {
         do{
             await utils.sleep(sleep);
             if(this.app.intelligence.hasBeenRun && this.app.intelligence.isMatchFinished()) success = false;
-            moveSpeed = this.slowdown?0.1:speed;
             if(!this.isMovementPossible(x,y)) success = false;
             moveStatus = await this._updatePositionAndMoveStatus();
         } while(success && moveStatus && moveStatus.includes("run")) // "near" and "end" status will stop the loop (but not the robot)
@@ -654,7 +701,7 @@ module.exports = class Robot {
 
     async moveAlongPath(params){
         let path=params.path;
-        let sleep = 100;
+        let sleep = 30;
         var success = true;
         if(!path.length) return false;
         if(this.modules.base && await this.modules.base.supportPath()){
@@ -669,18 +716,15 @@ module.exports = class Robot {
             do{
                 await utils.sleep(sleep);
                 if(this.app.intelligence.hasBeenRun && this.app.intelligence.isMatchFinished()) success = false;
-                //moveSpeed = this.slowdown?0.1:speed;
                 if(!this.isMovementPossible()) success = false;
-                //console.log("move possible", success)
                 moveStatus = await this._updatePositionAndMoveStatus();
-                console.log(success, moveStatus, path)
             } while(success && moveStatus && moveStatus.includes("run"))
             if(!success) this.modules.base.break();
         }
         else {
             //Not path support on base, run sections one by one
             for(let i=0;i<path.length;i++){
-                this.app.logger.log(`-> move path ${i+1}/${path.length}`);
+                //this.app.logger.log(`-> move path ${i+1}/${path.length}`);
                 success = success && await this._performMovement(path[i].x, path[i].y, path[i].angle, path[i].speed, path[i].nearDist, path[i].nearAngle)
                 
                 if(!success) break
