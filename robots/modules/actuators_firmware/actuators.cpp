@@ -6,19 +6,24 @@ SMS_STS feetechSTSDriver;
 
 Vector <Actuator*> actuators{
   new ActuatorFeetechSTS(10, "ACL", &feetechSTSDriver, 40 , false,  0.f ),  // AC Lift
-  new ActuatorFeetechSCS(11, "ACD", &feetechSCSDriver, 150, false,  5.f ),  // AC Distributor
-  new ActuatorFeetechSCS(12, "ACC", &feetechSCSDriver, 150, true , -5.f ),  // AC C door
-  new ActuatorFeetechSCS(13, "ACA", &feetechSCSDriver, 150, false,  0.f ),  // AC A door
+  new ActuatorFeetechSCS(11, "ACD", &feetechSCSDriver, 150, false,  -9.f ),  // AC Distributor
+  new ActuatorFeetechSCS(12, "ACC", &feetechSCSDriver, 150, true ,  -2.f ),  // AC C door
+  new ActuatorFeetechSCS(13, "ACA", &feetechSCSDriver, 150, false,  -2.f ),  // AC A door
 
-  new ActuatorFeetechSTS(20, "BCL", &feetechSTSDriver, 40 , false,  2.f ),  // BC Lift
-  new ActuatorFeetechSCS(21, "BCD", &feetechSCSDriver, 150, false,  0.f ),  // BC Distributor
-  new ActuatorFeetechSCS(22, "BCB", &feetechSCSDriver, 150, true ,  3.f ),  // BC A door
-  new ActuatorFeetechSCS(23, "BCC", &feetechSCSDriver, 150, false, -10.f),  // BC B door
+  new ActuatorFeetechSTS(20, "BCL", &feetechSTSDriver, 40 , false,  0.f ),  // BC Lift
+  new ActuatorFeetechSCS(21, "BCD", &feetechSCSDriver, 150, false,  8.f ),  // BC Distributor
+  new ActuatorFeetechSCS(22, "BCB", &feetechSCSDriver, 150, true ,  -9.f ),  // BC A door
+  new ActuatorFeetechSCS(23, "BCC", &feetechSCSDriver, 150, false,  8.f),  // BC B door
+  new ActuatorFeetechSTS(24, "BCE", &feetechSTSDriver, 140, true,  7.f),  // BC Elbow
 
-  new ActuatorFeetechSTS(30, "ABL", &feetechSTSDriver, 40 , true ,  2.f ),  // AB Lift
-  new ActuatorFeetechSCS(31, "ABD", &feetechSCSDriver, 150, true , -7.f ),  // AB Distributor
-  new ActuatorFeetechSCS(32, "ABA", &feetechSCSDriver, 150, true , -4.f ),  // AB A door
-  new ActuatorFeetechSCS(33, "ABB", &feetechSCSDriver, 150, false,  3.f ),  // AB B door
+  new ActuatorFeetechSTS(30, "ABL", &feetechSTSDriver, 40 , true ,  0.f ),  // AB Lift
+  new ActuatorFeetechSCS(31, "ABD", &feetechSCSDriver, 150, true ,  -1.f ),  // AB Distributor
+  new ActuatorFeetechSCS(32, "ABA", &feetechSCSDriver, 150, true ,  5.f ),  // AB A door
+  new ActuatorFeetechSCS(33, "ABB", &feetechSCSDriver, 150, false,  -8.f ),  // AB B door
+  new ActuatorFeetechSTS(34, "ABE", &feetechSTSDriver, 140, false,  5.f ),  // AB Elbow
+
+  new ActuatorPwm(25, "BCF", 14, 0), // Fan
+  new ActuatorPwm(35, "ABF", 22, 0)  // Fan
 };
 
 Vector<ActuatorGroup*> actuatorGroups{

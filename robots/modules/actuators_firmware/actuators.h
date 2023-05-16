@@ -54,6 +54,21 @@ protected:
   rampInt rampObj;
 };
 
+class ActuatorPwm : public Actuator {
+public:
+  ActuatorPwm(uint8_t id_, const char* name_, uint8_t pin_, int defaultValue_)
+  : Actuator(id_, name_, pin_, defaultValue_)
+  {
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, LOW);
+  }
+
+  void update() {
+    analogWrite(pin, rampObj.update());
+  }
+  
+};
+
 class ActuatorOnPCA9685 : public Actuator {
 public:
   ActuatorOnPCA9685(uint8_t id_, const char* name_, uint8_t pin_, int defaultValue_, int minUs = 400, int maxUs = 2500)
